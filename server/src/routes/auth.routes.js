@@ -17,15 +17,18 @@ function signToken(user) {
 
 router.post("/register", async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, isManager } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: "name, email, and password are required" });
     }
+    // "Manager" at signup maps to the existing is_admin flag; "User" is a
+    // regular (non-admin) account. Project-level roles (owner/contributor/
+    // viewer) are still assigned separately per project membership.
     const passwordHash = await bcrypt.hash(password, 10);
     const rows = await query(
-      `INSERT INTO users (name, email, password_hash) VALUES ($1,$2,$3)
+      `INSERT INTO users (name, email, password_hash, is_admin) VALUES ($1,$2,$3,$4)
        RETURNING id, name, email, is_admin, email_opt_out`,
-      [name, email, passwordHash]
+      [name, email, passwordHash, !!isManager]
     );
     const user = rows[0];
     res.status(201).json({ user, token: signToken(user) });
@@ -77,3 +80,5 @@ router.patch("/me/settings", requireAuth, async (req, res, next) => {
 });
 
 module.exports = router;
+
+

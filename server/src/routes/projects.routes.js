@@ -1,8 +1,9 @@
 const express = require("express");
 const { query, withTransaction } = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireAdmin } = require("../middleware/auth");
 const { requireProjectRole } = require("../middleware/permissions");
 const activityLog = require("../utils/activityLog");
+const bus = require("../utils/eventBus");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -24,7 +25,10 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+// Only managers (admin accounts) create projects. Regular users are added
+// as members afterwards and work within projects a manager has set up --
+// see the "Log in as" role split on the Login/Register pages.
+router.post("/", requireAdmin, async (req, res, next) => {
   try {
     const { name, description } = req.body;
     if (!name) return res.status(400).json({ error: "name is required" });
@@ -93,6 +97,15 @@ router.post("/:projectId/members", requireProjectRole(["owner"]), async (req, re
        ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
       [req.params.projectId, userRows[0].id, role]
     );
+
+    const projectRows = await query(`SELECT name FROM projects WHERE id = $1`, [req.params.projectId]);
+    bus.publish("project.member_added", {
+      projectId: req.params.projectId,
+      projectName: projectRows[0]?.name || "a project",
+      memberId: userRows[0].id,
+      actorId: req.user.id,
+    });
+
     res.status(201).json({ ok: true });
   } catch (err) {
     next(err);
@@ -117,3 +130,4 @@ router.patch("/:projectId/view-preference", requireProjectRole(["owner", "contri
 });
 
 module.exports = router;
+

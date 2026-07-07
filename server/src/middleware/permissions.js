@@ -29,3 +29,4 @@ function requireProjectRole(allowedRoles) {
 }
 
 module.exports = { requireProjectRole };
+

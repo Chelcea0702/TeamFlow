@@ -7,15 +7,21 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isManager, setIsManager] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+
+  // "User" and "Manager" are mutually exclusive, so checking one clears the other.
+  function selectRole(manager) {
+    setIsManager(manager);
+  }
 
   async function onSubmit(e) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await login(email, password);
+      await login(email, password, isManager);
       navigate("/");
     } catch (err) {
       setError(err.message);
@@ -36,6 +42,21 @@ export default function Login() {
           <label>Password</label>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
+
+        <div className="field">
+          <label>Log in as</label>
+          <div style={{ display: "flex", gap: 16 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: "normal" }}>
+              <input type="checkbox" style={{ width: "auto" }} checked={!isManager} onChange={() => selectRole(false)} />
+              User
+            </label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: "normal" }}>
+              <input type="checkbox" style={{ width: "auto" }} checked={isManager} onChange={() => selectRole(true)} />
+              Manager
+            </label>
+          </div>
+        </div>
+
         {error && <div className="error-text">{error}</div>}
         <button className="btn" type="submit" disabled={busy}>{busy ? "Logging in..." : "Log in"}</button>
       </form>
@@ -43,8 +64,10 @@ export default function Login() {
         No account? <Link to="/register">Register</Link>
       </p>
       <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-        Demo users (after seeding): alice@teamflow.dev / bob@teamflow.dev / cara@teamflow.dev, password: password123
+        Demo users (after seeding): alice@teamflow.dev (Manager) / bob@teamflow.dev (User) /
+        cara@teamflow.dev (User), password: password123
       </p>
     </div>
   );
 }
+

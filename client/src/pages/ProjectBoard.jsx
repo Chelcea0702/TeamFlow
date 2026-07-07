@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext";
 import TaskCard from "../components/TaskCard";
 import TaskModal from "../components/TaskModal";
 
@@ -13,6 +14,8 @@ const STATUSES = [
 
 export default function ProjectBoard() {
   const { projectId } = useParams();
+  const { user } = useAuth();
+  const isManager = !!user?.is_admin;
   const [project, setProject] = useState(null);
   const [members, setMembers] = useState([]);
   const [tasks, setTasks] = useState([]);
@@ -22,6 +25,9 @@ export default function ProjectBoard() {
   const [search, setSearch] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
   const [newTitle, setNewTitle] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("contributor");
+  const [inviteError, setInviteError] = useState(null);
 
   const loadTasks = useCallback(async () => {
     const params = new URLSearchParams();
@@ -32,13 +38,17 @@ export default function ProjectBoard() {
     setTasks(data.tasks);
   }, [projectId, filterStatus, filterAssignee, search]);
 
+  const loadMembers = useCallback(() => {
+    api.get(`/projects/${projectId}/members`).then((d) => setMembers(d.members));
+  }, [projectId]);
+
   useEffect(() => {
     api.get(`/projects/${projectId}`).then((d) => {
       setProject(d.project);
       // View preference comes back on the project list endpoint; fall back to kanban.
     });
-    api.get(`/projects/${projectId}/members`).then((d) => setMembers(d.members));
-  }, [projectId]);
+    loadMembers();
+  }, [projectId, loadMembers]);
 
   useEffect(() => {
     loadTasks();
@@ -55,10 +65,23 @@ export default function ProjectBoard() {
 
   async function createTask(e) {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!isManager || !newTitle.trim()) return;
     await api.post(`/projects/${projectId}/tasks`, { title: newTitle });
     setNewTitle("");
     loadTasks();
+  }
+
+  async function inviteMember(e) {
+    e.preventDefault();
+    setInviteError(null);
+    if (!inviteEmail.trim()) return;
+    try {
+      await api.post(`/projects/${projectId}/members`, { email: inviteEmail, role: inviteRole });
+      setInviteEmail("");
+      loadMembers();
+    } catch (err) {
+      setInviteError(err.message);
+    }
   }
 
   async function onDrop(e, status) {
@@ -117,10 +140,12 @@ export default function ProjectBoard() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <form onSubmit={createTask} style={{ display: "flex", gap: 6, flex: 2, minWidth: 220 }}>
-            <input placeholder="New task title..." value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-            <button className="btn" type="submit">Add</button>
-          </form>
+          {isManager && (
+            <form onSubmit={createTask} style={{ display: "flex", gap: 6, flex: 2, minWidth: 220 }}>
+              <input placeholder="New task title..." value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+              <button className="btn" type="submit">Add</button>
+            </form>
+          )}
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ maxWidth: 160 }}>
             <option value="">All statuses</option>
             {STATUSES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
@@ -133,6 +158,27 @@ export default function ProjectBoard() {
           <button className="btn secondary" onClick={exportCsv} type="button">Export CSV</button>
         </div>
       </div>
+
+      {isManager && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Add a member</h3>
+          <form onSubmit={inviteMember} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <input
+              placeholder="user@email.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              style={{ minWidth: 200 }}
+            />
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} style={{ maxWidth: 160 }}>
+              <option value="contributor">Contributor</option>
+              <option value="viewer">Viewer</option>
+              <option value="owner">Owner (manager)</option>
+            </select>
+            <button className="btn" type="submit">Add to project</button>
+          </form>
+          {inviteError && <div className="error-text">{inviteError}</div>}
+        </div>
+      )}
 
       {view === "kanban" && (
         <div className="kanban">

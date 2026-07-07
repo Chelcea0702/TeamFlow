@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useAuth } from "../context/AuthContext";
 
 export default function Projects() {
+  const { user } = useAuth();
+  const isManager = !!user?.is_admin;
   const [projects, setProjects] = useState([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,26 +40,28 @@ export default function Projects() {
     <div className="container">
       <h2>Your Projects</h2>
 
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ marginTop: 0 }}>Create a project</h3>
-        <form onSubmit={createProject}>
-          <div className="field">
-            <label>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-          <div className="field">
-            <label>Description</label>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-          {error && <div className="error-text">{error}</div>}
-          <button className="btn" type="submit">Create</button>
-        </form>
-      </div>
+      {isManager && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3 style={{ marginTop: 0 }}>Create a project</h3>
+          <form onSubmit={createProject}>
+            <div className="field">
+              <label>Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>Description</label>
+              <input value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
+            {error && <div className="error-text">{error}</div>}
+            <button className="btn" type="submit">Create</button>
+          </form>
+        </div>
+      )}
 
       {loading ? (
         <p>Loading...</p>
       ) : projects.length === 0 ? (
-        <p>No projects yet. Create one above.</p>
+        <p>{isManager ? "No projects yet. Create one above." : "No projects yet. A manager will add you to one."}</p>
       ) : (
         projects.map((p) => (
           <div className="card" key={p.id}>
@@ -76,3 +81,4 @@ export default function Projects() {
     </div>
   );
 }
+

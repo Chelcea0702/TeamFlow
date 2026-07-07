@@ -1,6 +1,6 @@
 const express = require("express");
 const { query, withTransaction } = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireAdmin } = require("../middleware/auth");
 const { requireProjectRole } = require("../middleware/permissions");
 const activityLog = require("../utils/activityLog");
 const bus = require("../utils/eventBus");
@@ -56,7 +56,10 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-router.post("/", requireProjectRole(["owner", "contributor"]), async (req, res, next) => {
+// Only managers create tasks. Users are assigned tasks by a manager and
+// work them (status updates, comments) but never originate them -- see
+// requireAdmin below instead of a project-role check.
+router.post("/", requireAdmin, async (req, res, next) => {
   try {
     const { title, description, priority, assigneeId, dueDate, parentTaskId } = req.body;
     if (!title) return res.status(400).json({ error: "title is required" });
@@ -235,3 +238,4 @@ router.delete("/:taskId/relations/:relationId", requireProjectRole(["owner", "co
 });
 
 module.exports = router;
+

@@ -20,14 +20,24 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  async function login(email, password) {
+  async function login(email, password, expectedIsManager) {
     const data = await api.post("/auth/login", { email, password });
+    // The role checkbox on the login form is validated against the
+    // account's actual role after authenticating, since the account's role
+    // (is_admin) lives in the database, not in the login form. This catches
+    // someone picking the wrong role for their account rather than silently
+    // logging them in as the wrong type.
+    if (typeof expectedIsManager === "boolean" && !!data.user.is_admin !== expectedIsManager) {
+      api.clearToken();
+      const wanted = expectedIsManager ? "Manager" : "User";
+      throw new Error(`This account is not registered as a ${wanted}. Please select the correct role.`);
+    }
     api.setToken(data.token);
     setUser(data.user);
   }
 
-  async function register(name, email, password) {
-    const data = await api.post("/auth/register", { name, email, password });
+  async function register(name, email, password, isManager) {
+    const data = await api.post("/auth/register", { name, email, password, isManager });
     api.setToken(data.token);
     setUser(data.user);
   }
@@ -47,3 +57,4 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+

@@ -115,6 +115,76 @@ bus.subscribe("rca.submitted", async ({ rcaId, projectId, rcaTitle, actorId, rev
   }
 });
 
+// A comment is how a user reports progress/questions to a manager, and how
+// a manager gives direction back to a user. Notify whoever "owns" the task
+// (its creator -- always a manager, since only managers create tasks) plus
+// its assignee, skipping the commenter themselves, plus anyone @mentioned.
+bus.subscribe("comment.added", async ({ ownerType, ownerId, commentId, authorId, bodyPreview, mentionIds }) => {
+  const recipients = new Set();
+
+  if (ownerType === "task") {
+    const rows = await query(`SELECT title, created_by, assignee_id FROM tasks WHERE id = $1`, [ownerId]);
+    if (rows.length > 0) {
+      const task = rows[0];
+      if (task.created_by) recipients.add(task.created_by);
+      if (task.assignee_id) recipients.add(task.assignee_id);
+
+      for (const userId of mentionIds || []) recipients.add(userId);
+      recipients.delete(authorId);
+
+      for (const userId of recipients) {
+        await deliver({
+          userId,
+          eventType: "comment.added",
+          entityType: "task",
+          entityId: ownerId,
+          dedupeKey: `comment.added:${commentId}:${userId}`,
+          title: "New comment on a task",
+          body: `"${task.title}": ${bodyPreview}`,
+          wantsEmail: false,
+        });
+      }
+    }
+  } else if (ownerType === "rca") {
+    const rows = await query(`SELECT title, created_by FROM rcas WHERE id = $1`, [ownerId]);
+    if (rows.length > 0) {
+      const rca = rows[0];
+      if (rca.created_by) recipients.add(rca.created_by);
+      for (const userId of mentionIds || []) recipients.add(userId);
+      recipients.delete(authorId);
+
+      for (const userId of recipients) {
+        await deliver({
+          userId,
+          eventType: "comment.added",
+          entityType: "rca",
+          entityId: ownerId,
+          dedupeKey: `comment.added:${commentId}:${userId}`,
+          title: "New comment on an RCA",
+          body: `"${rca.title}": ${bodyPreview}`,
+          wantsEmail: false,
+        });
+      }
+    }
+  }
+});
+
+// A manager adding someone to a project is effectively assigning them to
+// it, so the new member should hear about it right away.
+bus.subscribe("project.member_added", async ({ projectId, projectName, memberId, actorId }) => {
+  if (!memberId || memberId === actorId) return;
+  await deliver({
+    userId: memberId,
+    eventType: "project.member_added",
+    entityType: "project",
+    entityId: projectId,
+    dedupeKey: `project.member_added:${projectId}:${memberId}`,
+    title: "You were added to a project",
+    body: `You were added to "${projectName}".`,
+    wantsEmail: true,
+  });
+});
+
 bus.subscribe("review.decided", async ({ rcaId, rcaTitle, projectId, reviewerId, decision, ownerIds }) => {
   for (const ownerId of ownerIds) {
     if (ownerId === reviewerId) continue;
@@ -132,3 +202,4 @@ bus.subscribe("review.decided", async ({ rcaId, rcaTitle, projectId, reviewerId,
 });
 
 module.exports = { deliver, getProjectMembers };
+
